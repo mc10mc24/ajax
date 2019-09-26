@@ -378,39 +378,92 @@ function load_data(){
 		$post = get_post( $id );
 		$title = $post->post_title;
 		$content = $post->post_content;
+		$image = get_the_post_thumbnail_url($id);
 	}
-	echo json_encode(['id'=>$id,'title'=>$title, 'content'=>$content]);
+	echo json_encode(['id'=>$id,'title'=>$title, 'content'=>$content, 'url' => $image]);
 	die();
 }
 add_action( 'wp_ajax_load_data', 'load_data' );
 add_action( 'wp_ajax_nopriv_load_data', 'load_data');
 
-add_action('wp_enqueue_scripts', 'ajax_insert_data');
-function ajax_insert_data(){
+add_action('wp_enqueue_scripts', 'ajax_update_data');
+function ajax_update_data(){
 	wp_enqueue_script( 'jquery.min', get_template_directory_uri() . '/js/jquery.min.js', array('jquery') );
-    wp_localize_script( 'jquery.min', 'ajax_insert', array(
+    wp_localize_script( 'jquery.min', 'ajax_update', array(
             'ajax_url'   => admin_url( 'admin-ajax.php' ),
         )
     );
 }
 
-function insert_data(){
-	$id = $_POST['pid'];
-	$post = array(
-        'ID' => esc_sql($id),
-        'post_content' => wp_kses_post($_POST['msg']),
-        'post_title' => wp_strip_all_tags($_POST['title'])
-    );
-    $result = wp_update_post($post, true);
-    $post = get_post( $id );
-	$title = $post->post_title;
-	$content = $post->post_content;
+function update_data(){
+	$id = $_POST['id'];
+	//echo "<pre>";print_r($_FILES);exit;
+	if(empty($id)){
+		$my_post = array(
+		    'post_title'    => $_POST['title'],
+		    'post_content'  => $_POST['msg'],
+		    'post_status'   => 'publish',
+		    'post_author'   => 1,
+		    'post_type'   => 'game-reviews'
+		);
+		// Insert the post into the database.
+		$post_id = wp_insert_post( $my_post );
+
+		require_once("../wp-load.php");
+		$IMGFileName = $_FILES["file"]["name"];
+		$upload = wp_upload_bits($_FILES["file"]["name"], null, file_get_contents($_FILES["file"]["tmp_name"]));
+	    
+	    $filename = $upload['file'];
+	    $wp_filetype = wp_check_filetype($filename, null );
+	    $attachment = array(
+	        'post_mime_type' => $wp_filetype['type'],
+	        'post_title' => sanitize_file_name($filename),
+	        'post_content' => '',
+	        'post_status' => 'inherit'
+	    );
+	    $attach_id = wp_insert_attachment( $attachment, $filename, $post_id );
+	    require_once(ABSPATH . 'wp-admin/includes/image.php');
+	    $attach_data = wp_generate_attachment_metadata( $attach_id, $filename );
+	    wp_update_attachment_metadata( $attach_id, $attach_data );
+	    set_post_thumbnail( $post_id, $attach_id );
+		//echo $newpost_id;exit;
+	} else {
+		require_once("../wp-load.php");
+		if(!empty($_FILES["file"]["name"])){
+			$IMGFileName = $_FILES["file"]["name"];
+			$upload = wp_upload_bits($_FILES["file"]["name"], null, file_get_contents($_FILES["file"]["tmp_name"]));
+		    $post_id = $id; //set post id to which you need to set post thumbnail
+		    $filename = $upload['file'];
+		    $wp_filetype = wp_check_filetype($filename, null );
+		    $attachment = array(
+		        'post_mime_type' => $wp_filetype['type'],
+		        'post_title' => sanitize_file_name($filename),
+		        'post_content' => '',
+		        'post_status' => 'inherit'
+		    );
+		    $attach_id = wp_insert_attachment( $attachment, $filename, $post_id );
+		    require_once(ABSPATH . 'wp-admin/includes/image.php');
+		    $attach_data = wp_generate_attachment_metadata( $attach_id, $filename );
+		    wp_update_attachment_metadata( $attach_id, $attach_data );
+		    set_post_thumbnail( $post_id, $attach_id );
+		}
+		
+		$post = array(
+	        'ID' => esc_sql($id),
+	        'post_content' => wp_kses_post($_POST['msg']),
+	        'post_title' => wp_strip_all_tags($_POST['title'])
+	    );
+	    $result = wp_update_post($post, true);
+	    $post = get_post( $id );
+		$title = $post->post_title;
+		$content = $post->post_content;
+	}
+	
 	echo json_encode(['id'=>$id,'title'=>$title, 'content'=>$content]);
 	die();
 }
-add_action( 'wp_ajax_insert_data', 'insert_data' );
-add_action( 'wp_ajax_nopriv_insert_data', 'insert_data');
-
+add_action( 'wp_ajax_update_data', 'update_data' );
+add_action( 'wp_ajax_nopriv_update_data', 'update_data');
 
 // Creates Book Reviews Custom Post Type
 function book_reviews_init() {
